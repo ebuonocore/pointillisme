@@ -2,7 +2,6 @@ from PIL import Image
 from math import sqrt
 from random import randint
 import numpy as np
-
 from sklearn.cluster import KMeans
 
 
@@ -20,82 +19,16 @@ def distance(couleur_A, couleur_B):
     )
 
 
-def ref_palette(nb_ref):
-    """Renvoie la liste de nb_ref couleurs placées régulièrement dans un espace à 3 dimensions"""
-    nb_ref = max(8, nb_ref)
-    # Une référence est caractérise par (x, y, z, p). Où x, y, z sont les coordonnées et p le poids.
-    ref = []
-    # Calcul du nombre de segments unitaires par dimension
-    nb_segments = max(1, int(nb_ref ** (1 / 3)))
-    matrice = [[1, 1, 1], [0, 1, 1], [0, 0, 1]]
-    nb_segments_x, nb_segments_y, nb_segments_z = nb_segments, nb_segments, nb_segments
-    for dx, dy, dz in matrice:
-        if nb_ref >= nb_segments * (nb_segments + dy) * (nb_segments + dz):
-            nb_segments_x = nb_segments
-            nb_segments_y = nb_segments + dy
-            nb_segments_z = nb_segments + dz
-            # print(nb_ref, nb_segments, nb_segments_x, nb_segments_y, nb_segments_z)
-            break
-    dim_segment_x = 255 // nb_segments_x
-    dim_segment_y = 255 // nb_segments_y
-    dim_segment_z = 255 // nb_segments_z
-    for i in range(nb_segments_x):
-        for j in range(nb_segments_y):
-            for k in range(nb_segments_z):
-                x = i * dim_segment_x + dim_segment_x // 2
-                y = j * dim_segment_y + dim_segment_y // 2
-                z = k * dim_segment_z + dim_segment_z // 2
-                ref.append((x, y, z, 0))
-    return ref
-
-
-def ref_plus_poche(couleur, refs):
-    """Renvoie la référence la plus proche de la couleur et son indice"""
-    dist_min = distance(couleur, refs[0][0:3])
+def ref_plus_proche(couleur, refs):
+    """Renvoie la référence la plus proche de la couleur"""
+    dist_min = distance(couleur, refs[0])
     ref_min = refs[0]
-    i_min = 0
-    for i, ref in enumerate(refs):
-        dist = distance(couleur, ref[0:3])
+    for ref in refs:
+        dist = distance(couleur, ref)
         if dist < dist_min:
             dist_min = dist
             ref_min = ref
-            i_min = i
-    return ref_min, i_min
-
-
-def déplace_ref(ref, couleur):
-    """Calcule les nouvelles coordonnées de la référence déplacée par rapport à la couleur"""
-    x, y, z, p = ref
-    x = (x * p + couleur[0]) / (p + 1)
-    y = (y * p + couleur[1]) / (p + 1)
-    z = (z * p + couleur[2]) / (p + 1)
-    p = p + 1
-    return (x, y, z, p)
-
-
-def construit_palette(img, nb_ref):
-    """Renvoie la liste des nb_ref couleurs les plus représentées dans l'image"""
-    refs = ref_palette(nb_ref)
-    dim_x, dim_y = img.size
-    pas_x, pas_y = dim_x // 20, dim_y // 20
-    for x in range(0, dim_x, pas_x):
-        for y in range(0, dim_y, pas_y):
-            couleur_pixel = img.getpixel((x, y))
-            ref_proche, indice_ref = ref_plus_poche(couleur_pixel, refs)
-            nouvelle_ref = déplace_ref(ref_proche, couleur_pixel)
-            refs[indice_ref] = nouvelle_ref
-    refs = organise_palette(refs)
-    return refs
-
-
-def organise_palette(refs):
-    """Trie les références par ordre décroissant de poids
-    et arrondit les coordonnées de la couleur à l'entier le plus proche"""
-    refs.sort(key=lambda x: x[3], reverse=True)
-    for i, ref in enumerate(refs):
-        # arrondit les coordonnées de la couleur à l'entier le plus proche
-        refs[i] = tuple([round(x) for x in ref])
-    return refs
+    return ref_min
 
 
 def rep_palette(refs):
@@ -114,7 +47,7 @@ def rep_palette(refs):
     fen.mainloop()
 
 
-def construit_destination(img, refs, pas, alea=4):
+def construit_destination(img, palette, pas, alea=4):
     """Construit une image de destination de mêmes dimensions que l'image source sur fond blanc"""
     dim_x, dim_y = img.size
     img_dest = Image.new("RGB", (dim_x, dim_y), (255, 255, 255))
@@ -124,8 +57,9 @@ def construit_destination(img, refs, pas, alea=4):
             var_y = randint(-pas // alea, pas // alea)
             var_r = randint(0, pas // alea)
             couleur_pixel = img.getpixel((x, y))
-            ref_proche, indice_ref = ref_plus_poche(couleur_pixel, refs)
-            i, j, k, p = ref_proche
+            ref_proche = ref_plus_proche(couleur_pixel, palette)
+            couleur = (int(x) for x in ref_proche)
+            print("*** *** ", couleur, ref_proche)
             # Dessine un cercle de couleur (x, y, z) de rayon pas//2
             for dx in range(-pas // 2, pas // 2):
                 for dy in range(-pas // 2 - var_r, pas // 2 + var_r):
@@ -133,7 +67,7 @@ def construit_destination(img, refs, pas, alea=4):
                         X = x + dx + var_x
                         Y = y + dy + var_y
                         if 0 <= X < dim_x and 0 <= Y < dim_y:
-                            img_dest.putpixel((X, Y), (i, j, k))
+                            img_dest.putpixel((X, Y), couleur)
     return img_dest
 
 
@@ -163,7 +97,7 @@ def enregistre(img, fichier):
 
 
 def échantillon(img, N):
-    """Renvoie N couleurs de l'image img afin de créer un échantillon"""
+    """Renvoie N pixels de l'image img afin de créer un échantillon"""
     dim_x, dim_y = img.size
     nb_pixels = dim_x * dim_y
     if N >= nb_pixels:
@@ -184,17 +118,31 @@ def échantillon(img, N):
     return np.array(couleurs)
 
 
+def construit_palette(image, nb_pixels_echantillon=10000, nb_couleurs=16):
+    """Construit une palette de nb_couleurs couleurs à partir d'un échantillon selon l'algorithme de KMeans
+    image : image source
+    nb_couleurs : nombre de couleurs souhaitées de la palette
+    nb_pixels_echantillon : nombre de pixels de l'échantillon
+    """
+    couleurs_échantillon = échantillon(image, nb_pixels_echantillon)
+    model_KMeans = KMeans(n_clusters=nb_couleurs, random_state=0)
+    model_KMeans.fit(couleurs_échantillon)
+    centroids = model_KMeans.cluster_centers_
+    # rep_palette(centroids)
+    return centroids
+
+
 if __name__ == "__main__":
-    NB_COULEURS_PALETTE = 30
+    NB_COULEURS_PALETTE = 16
+    NB_PIXELS_ECHANTILLON = 1000
+
+    # Sélection du fichier
     fichier = sélectionne_fichier()
     dossier, nom_fichier, extension = sépare_dossier_fichier(fichier)
     chemin = dossier + nom_fichier + extension
-    img = ouvre(chemin)
-    taille_image = img.size
-    print(f"Dimension de {chemin} : {taille_image}")
-    couleurs = échantillon(img, 1000)
-    print(" size : ", couleurs.size, " shape : ", couleurs.shape)
-    model_KMeans = KMeans(n_clusters=NB_COULEURS_PALETTE, random_state=0)
-    model_KMeans.fit(couleurs)
-    centroids = model_KMeans.cluster_centers_
-    rep_palette(centroids)
+    photo = ouvre(chemin)
+    taille_image = photo.size
+
+    print(f"Dimension de {nom_fichier} : {taille_image}")
+    palette = construit_palette(photo, NB_PIXELS_ECHANTILLON, NB_COULEURS_PALETTE)
+    rep_palette(palette)

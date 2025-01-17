@@ -1,6 +1,9 @@
 from PIL import Image
 from math import sqrt
 from random import randint
+import numpy as np
+
+from sklearn.cluster import KMeans
 
 
 def ouvre(fichier):
@@ -103,7 +106,8 @@ def rep_palette(refs):
     fen.title("Palette de couleurs")
     i_max = round(sqrt(len(refs))) + 1
     for i, ref in enumerate(refs):
-        x, y, z, p = ref
+        x, y, z = ref
+        x, y, z = int(min(255, x)), int(min(255, y)), int(min(255, z))
         couleur = "#%02x%02x%02x" % (x, y, z)
         cadre = tk.Frame(fen, bg=couleur, width=50, height=50)
         cadre.grid(row=i // i_max, column=i % i_max)
@@ -156,3 +160,41 @@ def sépare_dossier_fichier(chemin):
 
 def enregistre(img, fichier):
     img.save(fichier)
+
+
+def échantillon(img, N):
+    """Renvoie N couleurs de l'image img afin de créer un échantillon"""
+    dim_x, dim_y = img.size
+    nb_pixels = dim_x * dim_y
+    if N >= nb_pixels:
+        pas = 1
+    else:
+        pas = sqrt(nb_pixels // N)
+    domaine_x = [int(i * pas) for i in range(int(dim_x // pas) + 1)]
+    if domaine_x[-1] > dim_x:
+        domaine_x = domaine_x[:-1]
+    domaine_y = [int(i * pas) for i in range(int(dim_y // pas) + 1)]
+    if domaine_y[-1] > dim_y:
+        domaine_y = domaine_y[:-1]
+    couleurs = []
+    for x in domaine_x:
+        for y in domaine_y:
+            couleur_pixel = img.getpixel((x, y))
+            couleurs.append(couleur_pixel)
+    return np.array(couleurs)
+
+
+if __name__ == "__main__":
+    NB_COULEURS_PALETTE = 30
+    fichier = sélectionne_fichier()
+    dossier, nom_fichier, extension = sépare_dossier_fichier(fichier)
+    chemin = dossier + nom_fichier + extension
+    img = ouvre(chemin)
+    taille_image = img.size
+    print(f"Dimension de {chemin} : {taille_image}")
+    couleurs = échantillon(img, 1000)
+    print(" size : ", couleurs.size, " shape : ", couleurs.shape)
+    model_KMeans = KMeans(n_clusters=NB_COULEURS_PALETTE, random_state=0)
+    model_KMeans.fit(couleurs)
+    centroids = model_KMeans.cluster_centers_
+    rep_palette(centroids)

@@ -1,5 +1,5 @@
 Affecte un filtre pointilliste à une image
->Méthode de construction de la palette : K-Means Clustering
+>Méthode de construction de la palette : K-Means Clustering  
 > <a href="https://www.youtube.com/watch?v=FTtzd31IAOw">APPRENTISSAGE NON-SUPERVISÉ avec Python (24/30) </a>
 
 **Améliorations :**  
